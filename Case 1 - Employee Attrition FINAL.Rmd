@@ -1,0 +1,726 @@
+---
+title: "Cluster Analysis on Employee Attrition Data"
+output: rmarkdown::github_document
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+```
+### Introduction
+
+This analysis looked at the fictional dataset IBM HR Analytics Employee Attrition and Performance, which was found on Kaggle at:
+
+https://www.kaggle.com/pavansubhasht/ibm-hr-analytics-attrition-dataset
+
+The goal was to use this dataset to discover insights into what types of employees were more likely to leave the company through clustering analysis.  If a company could successfully do this, it could enable them to identify certain groups that are at a higher risk and take proactive steps to help reduce turnover.  Since there are many costs associated with employee turnover, this type of analysis could be very profitable by helping to reduce these costs.
+
+### The Data
+
+```{r include=FALSE}
+employees <- read.csv("C:/Users/Lucy's House/Desktop/Class/BZAN 552 - Data Mining/Final Projects/Case 1 - Employee Attrition/Employees.csv")
+options(scipen=999)
+library(cluster)
+library(dplyr)
+```
+
+The dataset consisted of 35 variables for 1,470 employees.  A list and brief description (if necessary) of each variable is included below:
+
+Age
+
+Attrition - whether or not the employee left the company (Yes/No)
+
+BusinessTravel - how often the employee travels (None/Frequently/Rarely)
+
+DailyRate - amount of money paid per day
+
+Department (Human Resources/Research & Development/Sales)
+
+DistanceFromHome
+
+Education - (1:Below College, 2:College, 3:Bachelor, 4:Master, 5:Doctor)
+             
+EducationField
+
+EmployeeCount - all employees have count of 1
+
+EmployeeNumber - employee's ID number
+
+EnvironmentSatisfaction - satisfaction with work environment (1-4)
+
+Gender (Male/Female)
+
+HourlyRate - amount of money paid per hour
+
+JobInvolvement - how involved employee is with job (1-4)
+
+JobLevel (1-5)
+
+JobRole
+
+JobSatisfaction - satisfaction with job (1-4)
+
+MaritalStatus (Single/Married/Divorced)
+
+MonthlyIncome
+
+MonthlyRate - amount of money paid per month
+
+NumCompaniesWorked - number of companies worked for in career
+
+Over18 - if employee is over 18 (all are Yes)
+
+OverTime - if employee works overtime (Yes/No)
+
+PercentSalaryHike - the percent change in salary from 2015 to 2016
+
+PerformanceRating - rating for job performance (3 or 4)
+
+RelationshipSatisfaction - how happy employee is with colleagues (1-4)
+
+StandardHours - number of standard hours worked over 2 weeks (all are 80)
+
+StockOptionLevel - how much in company's stock options owned (0-3)
+
+TotalWorkingYears - number of years employee has worked
+
+TrainingTimesLastYear - how many times employee was trained last year
+
+WorkLifeBalance (1-4)
+
+YearsAtCompany - number of years worked at company
+
+YearsInCurrentRole - number of years in current job role
+
+YearsSinceLastPromotion - number of years since last promotion
+
+YearsWithCurrManager - number of years with current manager
+
+## Part 1 - Clustering By All Employees
+
+### Approach
+
+The approach to this problem was to use clustering analysis to determine the types of employees who might be more likely to leave the company.  One immediate observation with 35 variables was that using some type of dimension reduction technique - such as principal components analysis (PCA) - might be beneficial to reduce the number of variables.  
+
+However, before proceeding, it was important to investigate the different data types in the dataset.  
+
+```{r}
+str(employees)
+```
+
+You can quickly observe that both numeric (26) and categorical variables (9) are included, and that this would be an important fact in driving the types of techniques used for this analysis.  Neither k-means nor hierarchical clustering are well-suited for categorical variables, so the decision was made to use partitioning around medoids (PAM) in conjunction with the Gower distance metric, which are better techniques to use for clustering on mixed data.
+
+As a first pass, PCA was not applied, which minimized the amount of cleaning that needed to be performed before the Gower distance was calculated and the PAM algorithm was applied.
+
+### Cleaning Data for PAM - Without PCA
+
+Even though the categorical variables were essentially left alone, the numeric variables needed to be scaled since they were all on different scales.  Therefore, if a variable was numeric, the 'scale' function was applied.  Otherwise, the factor variables were retained in their current formats.
+
+```{r}
+employees_scaled <- cbind(employees[,-which(names(employees) %in%  names(employees)[sapply(employees, is.numeric)])], scale(employees[,names(employees)[sapply(employees, is.numeric)]]))
+```
+
+After reviewing all of the variables, it become apparent that several would not be needed for the analysis.  The variables Over 18 ('Y'), Employee Count (1), and Standard Hours (80) contained the same values for every employee in the file, so no new information would be added by including them.  EmployeeNumber was also removed, because this was the employee's ID number, which also adds no value to the analysis. 
+
+```{r}
+employees_scaled$Over18 <- NULL
+employees_scaled$EmployeeCount <- NULL
+employees_scaled$StandardHours <- NULL
+employees_scaled$EmployeeNumber <- NULL
+```
+
+### PAM Clustering with Gower Distance on Entire Dataset - Without PCA
+
+At this point, the data was in the appropriate format to calculate the Gower distance and apply the PAM clustering algorithm.  The Gower distance was calculated with the 'daisy' function and then used as the input to the 'pam' function.
+
+Another important part of this process was to determine the optimal number of clusters to use.  In order to do this, the Silhouette coefficient was used to determine which value of k (2-8) had the highest value.  The results were then plotted for easy visualization.
+
+``` {r}
+gower_dist <- daisy(employees_scaled, metric = "gower")
+
+sil_width <- c(NA)
+for(i in 2:8){  
+  pam_fit <- pam(gower_dist, diss = TRUE, k = i)  
+  sil_width[i] <- pam_fit$silinfo$avg.width  
+}
+plot(1:8, sil_width,
+     xlab = "Number of clusters",
+     ylab = "Silhouette Width")
+lines(1:8, sil_width)
+```
+
+You can see from the plot that 2 clusters would be the optimal number to use.  Therefore, the fit was created with k=2 so that summary statistics could be calculated for each cluster.  The cluster results were also appended to the original employees dataset in order to dig deeper into the results.
+
+```{r}
+k <- 2
+pam_fit <- pam(gower_dist, diss = TRUE, k)
+
+pam_results <- employees %>%
+  mutate(cluster = pam_fit$clustering) %>%
+  group_by(cluster) %>%
+  do(the_summary = summary(.))
+
+employees <- cbind(employees, pam_fit$clustering)
+```
+
+The first check was to see how many employees ended up in each cluster.  As you can see from the table breakdown, they are fairly balanced.
+
+```{r}
+table(pam_fit$clustering)
+```
+
+You can view the complete summary for every variable by looking at the summary generated above('pam_results$the_summary'), but there are a couple of key differences that stand out between the clusters.
+
+The first thing observed is that one cluster has a higher than average attrition rate, while the other cluster is lower than average.
+
+```{r, echo=FALSE}
+Attrition <- c(table(employees$Attrition)[2]/sum(table(employees$Attrition)), table(employees$Attrition[employees$`pam_fit$clustering`==1])[2]/  sum(table(employees$Attrition[employees$`pam_fit$clustering`==1])), table(employees$Attrition[employees$`pam_fit$clustering`==2])[2]/  sum(table(employees$Attrition[employees$`pam_fit$clustering`==2])))
+Attrition <- round(Attrition, 3)
+
+text(x = barplot(Attrition, names.arg = c("All Employees", "Cluster 1", "Cluster 2"), ylab = "Percentage Attrition", ylim = c(0, 0.25)), y = Attrition, label = Attrition, pos = 3)
+```
+
+In the cluster with higher attrition, you can see that the age is slightly lower, pay is lower, these employees have fewer years at company, fewer overall working years, and lower job levels.  These factors all point to employees who are less tenured and younger in their careers than the cluster with less attrition.
+
+```{r, echo=FALSE}
+Age <- c(mean(employees$Age), mean(employees$Age[employees$`pam_fit$clustering`==1]), mean(employees$Age[employees$`pam_fit$clustering`==2]))
+Age <- round(Age, 1)
+
+text(x = barplot(Age, names.arg = c("All Employees", "Cluster 1", "Cluster 2"), ylab = "Average Age", ylim = c(0, 50)), y = Age, label = Age, pos = 3)
+```
+
+```{r, echo=FALSE}
+MonthlyIncome <- c(mean(employees$MonthlyIncome), mean(employees$MonthlyIncome[employees$`pam_fit$clustering`==1]), mean(employees$MonthlyIncome[employees$`pam_fit$clustering`==2]))
+MonthlyIncome <- round(MonthlyIncome, 0)
+
+text(x = barplot(MonthlyIncome, names.arg = c("All Employees", "Cluster 1", "Cluster 2"), ylab = "Average Monthly Income", ylim = c(0, 9000)), y = MonthlyIncome, label = MonthlyIncome, pos = 3)
+```
+
+```{r, echo=FALSE}
+YearsAtCompany <- c(mean(employees$YearsAtCompany), mean(employees$YearsAtCompany[employees$`pam_fit$clustering`==1]), mean(employees$YearsAtCompany[employees$`pam_fit$clustering`==2]))
+YearsAtCompany <- round(YearsAtCompany, 1)
+
+text(x = barplot(YearsAtCompany, names.arg = c("All Employees", "Cluster 1", "Cluster 2"), ylab = "Average Years at Company", ylim = c(0, 10)), y = YearsAtCompany, label = YearsAtCompany, pos = 3)
+```
+
+```{r, echo=FALSE}
+TotalWorkingYears <- c(mean(employees$TotalWorkingYears), mean(employees$TotalWorkingYears[employees$`pam_fit$clustering`==1]), mean(employees$TotalWorkingYears[employees$`pam_fit$clustering`==2]))
+TotalWorkingYears <- round(TotalWorkingYears, 1)
+
+text(x = barplot(TotalWorkingYears, names.arg = c("All Employees", "Cluster 1", "Cluster 2"), ylab = "Average Total Working Years", ylim = c(0, 15)), y = TotalWorkingYears, label = TotalWorkingYears, pos = 3)
+```
+
+```{r, echo=FALSE}
+JobLevel <- c(mean(employees$JobLevel), mean(employees$JobLevel[employees$`pam_fit$clustering`==1]), mean(employees$JobLevel[employees$`pam_fit$clustering`==2]))
+JobLevel <- round(JobLevel, 1)
+
+text(x = barplot(JobLevel, names.arg = c("All Employees", "Cluster 1", "Cluster 2"), ylab = "Average Total Working Years", ylim = c(0, 3)), y = JobLevel, label = JobLevel, pos = 3)
+```
+
+While it makes sense that these younger, less tenured employees would be prone to higher rates of turnover, since they have less invested with the company over a longer period of time, there is another significant difference between the two clusters that could indicate something else going on.
+
+If you look at the differences in job roles/departments between the two groups, they are significant and seem to have broken out along these lines.
+
+```{r, echo=FALSE}
+library(ggplot2)
+All.Employees.Dept <- c(table(employees$Department)[1]/sum(table(employees$Department)), table(employees$Department)[2]/sum(table(employees$Department)), table(employees$Department)[3]/sum(table(employees$Department)))
+C1.Employees.Dept <- c(table(employees$Department[employees$`pam_fit$clustering`==1])[1]/sum(table(employees$Department[employees$`pam_fit$clustering`==1])), table(employees$Department[employees$`pam_fit$clustering`==1])[2]/sum(table(employees$Department[employees$`pam_fit$clustering`==1])), table(employees$Department[employees$`pam_fit$clustering`==1])[3]/sum(table(employees$Department[employees$`pam_fit$clustering`==1])))
+C2.Employees.Dept <- c(table(employees$Department[employees$`pam_fit$clustering`==2])[1]/sum(table(employees$Department[employees$`pam_fit$clustering`==2])), table(employees$Department[employees$`pam_fit$clustering`==2])[2]/sum(table(employees$Department[employees$`pam_fit$clustering`==2])), table(employees$Department[employees$`pam_fit$clustering`==2])[3]/sum(table(employees$Department[employees$`pam_fit$clustering`==2])))
+Departments <- as.data.frame(cbind(c("All", "All", "All", "Cluster 1", "Cluster 1", "Cluster 1", "Cluster 2", "Cluster 2", "Cluster 2"), c("Human Resources", "Research & Development", "Sales", "Human Resources", "Research & Development", "Sales", "Human Resources", "Research & Development", "Sales"), c(All.Employees.Dept, C1.Employees.Dept, C2.Employees.Dept)), row.names = FALSE)
+colnames(Departments) <- c("Group", "Department", "Percentage")
+Departments$Percentage <- round(as.numeric(as.character(Departments$Percentage)), 2)
+
+ggplot(Departments, aes(factor(Group), Percentage, fill = Department)) +
+  geom_bar(stat="identity", position = "dodge") + 
+  scale_fill_brewer(palette = "Set1") +
+  scale_x_discrete(name ="Group")
+```
+
+The cluster with higher attrition is made up almost entirely of jobs in the Research & Development Department, while the other cluster consists of a majority of Sales jobs.  This is an important insight that we will explore further in the analysis.
+
+### Cleaning Data for PAM - With PCA
+
+Earlier in the post, it was mentioned that the first cluster analysis did not perform PCA before PAM.  However, in order to compare the results between the two approaches, we will now begin the analysis again - except this time by applying PCA first.
+
+With so many categorical variables, it could prove challenging to perform PCA - which is typically best for numerical predictors, but we will still convert the categorical variables to binary variables to see how the results compare to the analysis with no PCA.  The same variables that were removed before (Over18, EmployeeCount, StandardHours, EmployeeNumber) were removed again, and we were left with the following transformed data set:
+
+```{r, include=FALSE}
+library(fastDummies)
+employees$`pam_fit$clustering` <- NULL
+employees_PCA <- employees
+
+employees_PCA$Attrition <- as.character(employees_PCA$Attrition)
+employees_PCA$Attrition <- ifelse(employees_PCA$Attrition == 'Yes', 1, 0)
+
+employees_PCA$BusinessTravel <- as.character(employees_PCA$BusinessTravel)
+employees_PCA <- cbind(employees_PCA, dummy_cols(employees_PCA$BusinessTravel)[,2:4])
+employees_PCA$BusinessTravel <- NULL
+names(employees_PCA)[35:37] <- c("Travel_Rarely", "Travel_Frequently", "Non_Travel")
+
+employees_PCA$Department <- as.character(employees_PCA$Department)
+employees_PCA <- cbind(employees_PCA, dummy_cols(employees_PCA$Department)[,2:4])
+employees_PCA$Department <- NULL
+names(employees_PCA)[37:39] <- c("Dept_Sales", "Dept_Research_Development", "Dept_Human_Resouces")
+
+employees_PCA$EducationField <- as.character(employees_PCA$EducationField)
+employees_PCA <- cbind(employees_PCA, dummy_cols(employees_PCA$EducationField)[,2:7])
+employees_PCA$EducationField <- NULL
+names(employees_PCA)[39:44] <- c("Edu_Life_Sciences", "Edu_Other", "Edu_Medical", "Edu_Marketing", "Edu_Technical_Degree", "Edu_Human_Resources")
+
+employees_PCA$Gender <- ifelse(employees_PCA$Gender == 'Male', 1, 0)
+
+employees_PCA$JobRole <- as.character(employees_PCA$JobRole)
+employees_PCA <- cbind(employees_PCA, dummy_cols(employees_PCA$JobRole)[,2:10])
+employees_PCA$JobRole <- NULL
+names(employees_PCA)[44:52] <- c("Job_Sales_Executive", "Job_Research_Scientist", "Job_Laboratory_Technician", "Job_Manufacturing_Director", "Job_Healthcare_Representative", "Job_Manager", "Job_Sales_Representative", "Job_Research_Director", "Job_Human_Resources")
+
+employees_PCA$MaritalStatus <- as.character(employees_PCA$MaritalStatus)
+employees_PCA <- cbind(employees_PCA, dummy_cols(employees_PCA$MaritalStatus)[,2:4])
+employees_PCA$MaritalStatus <- NULL
+names(employees_PCA)[52:54] <- c("Single", "Married", "Divorced")
+
+employees_PCA$OverTime <- ifelse(employees_PCA$OverTime == 'Yes', 1, 0)
+
+employees_PCA$Over18 <- NULL
+employees_PCA$EmployeeCount <- NULL
+employees_PCA$StandardHours <- NULL
+employees_PCA$EmployeeNumber <- NULL
+```
+
+```{r}
+str(employees_PCA)
+```
+
+With all variables successfully converted to a numeric format, PCA was ready to be applied.
+
+### Principal Components Analysis
+
+Like before, the first step was to scale the data, since the predictors were on various scales.  Once this was done, PCA was performed via the 'princomp' function.
+
+```{r}
+employees_PCA <- scale(employees_PCA)
+
+PCA_fit <- princomp(employees_PCA)
+employees_PCA <- PCA_fit$scores
+```
+
+The results were then viewed to determine the proportion of variance that each component contributes to the overall total.
+
+```{r}
+summary(PCA_fit)
+
+prop_var <- ((PCA_fit$sdev)^2)/sum((PCA_fit$sdev)^2)
+plot(cumsum(prop_var), xlab = "Principal Component",
+     ylab = "Cumulative Proportion of Variance", type = "b")
+```
+
+After viewing the summary values and the plot, it was determined to use the first 38 principal components.  This amount captured over 98% of the variance, but reduced the number of variables from 50 to 38.
+
+```{r}
+employees_PCA <- employees_PCA[1:1470, 1:38]
+```
+
+### PAM Clustering with Gower Distance on Entire Dataset - With PCA
+
+Once the number of variables was reduced on the dataset, the same clustering method used previously, which utilized Gower distance with PAM was implemented to determine the ideal number of clusters.
+
+``` {r}
+gower_dist_PCA <- daisy(employees_PCA, metric = "gower")
+
+sil_width <- c(NA)
+for(i in 2:8){  
+  pam_fit <- pam(gower_dist_PCA, diss = TRUE, k = i)  
+  sil_width[i] <- pam_fit$silinfo$avg.width  
+}
+plot(1:8, sil_width,
+     xlab = "Number of clusters",
+     ylab = "Silhouette Width")
+lines(1:8, sil_width)
+```
+
+The Silhouette plot shows a peak at k=4, which is the value we will use.
+
+```{r}
+k <- 4
+pam_fit_PCA <- pam(gower_dist_PCA, diss = TRUE, k)
+
+pam_results_PCA <- employees %>%
+  mutate(cluster = pam_fit_PCA$clustering) %>%
+  group_by(cluster) %>%
+  do(the_summary = summary(.))
+
+employees <- cbind(employees, pam_fit_PCA$clustering)
+```
+
+Once again, we start by checking the number of employees in each cluster to confirm that the distribution is reasonably balanced.
+
+```{r}
+table(pam_fit_PCA$clustering)
+```
+
+Next, you can see that the attrition rates vary by cluster, with one being clearly above average, one being clearly below average, and the other two hovering around average.
+
+```{r, echo=FALSE}
+Attrition_PCA <- c(table(employees$Attrition)[2]/sum(table(employees$Attrition)), table(employees$Attrition[employees$`pam_fit_PCA$clustering`==1])[2]/  sum(table(employees$Attrition[employees$`pam_fit_PCA$clustering`==1])), table(employees$Attrition[employees$`pam_fit_PCA$clustering`==2])[2]/  sum(table(employees$Attrition[employees$`pam_fit_PCA$clustering`==2])),
+table(employees$Attrition[employees$`pam_fit_PCA$clustering`==3])[2]/  sum(table(employees$Attrition[employees$`pam_fit_PCA$clustering`==3])), table(employees$Attrition[employees$`pam_fit_PCA$clustering`==4])[2]/  sum(table(employees$Attrition[employees$`pam_fit_PCA$clustering`==4])))                   
+Attrition_PCA <- round(Attrition_PCA, 3)
+
+text(x = barplot(Attrition_PCA, names.arg = c("All Employees", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4"), ylab = "Percentage Attrition", ylim = c(0, 0.25)), y = Attrition_PCA, label = Attrition_PCA, pos = 3)
+```
+
+We then look at how each cluster differs along some of the same variables that we investigated in the first analysis to see if a similar picture begins to emerge.
+
+```{r, echo=FALSE}
+Age_PCA <- c(mean(employees$Age), mean(employees$Age[employees$`pam_fit_PCA$clustering`==1]), mean(employees$Age[employees$`pam_fit_PCA$clustering`==2]), mean(employees$Age[employees$`pam_fit_PCA$clustering`==3]), mean(employees$Age[employees$`pam_fit_PCA$clustering`==4]))
+Age_PCA <- round(Age_PCA, 1)
+
+text(x = barplot(Age_PCA, names.arg = c("All Employees", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4"), ylab = "Average Age", ylim = c(0, 50)), y = Age_PCA, label = Age_PCA, pos = 3)
+```
+
+```{r, echo=FALSE}
+MonthlyIncome_PCA <- c(mean(employees$MonthlyIncome), mean(employees$MonthlyIncome[employees$`pam_fit_PCA$clustering`==1]), mean(employees$MonthlyIncome[employees$`pam_fit_PCA$clustering`==2]), mean(employees$MonthlyIncome[employees$`pam_fit_PCA$clustering`==3]), mean(employees$MonthlyIncome[employees$`pam_fit_PCA$clustering`==4]))
+MonthlyIncome_PCA <- round(MonthlyIncome_PCA, 1)
+
+text(x = barplot(MonthlyIncome_PCA, names.arg = c("All Employees", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4"), ylab = "Average Monthly Income", ylim = c(0, 9000)), y = MonthlyIncome_PCA, label = MonthlyIncome_PCA, pos = 3)
+```
+
+```{r, echo=FALSE}
+YearsAtCompany_PCA <- c(mean(employees$YearsAtCompany), mean(employees$YearsAtCompany[employees$`pam_fit_PCA$clustering`==1]), mean(employees$YearsAtCompany[employees$`pam_fit_PCA$clustering`==2]), mean(employees$YearsAtCompany[employees$`pam_fit_PCA$clustering`==3]), mean(employees$YearsAtCompany[employees$`pam_fit_PCA$clustering`==4]))
+YearsAtCompany_PCA <- round(YearsAtCompany_PCA, 1)
+
+text(x = barplot(YearsAtCompany_PCA, names.arg = c("All Employees", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4"), ylab = "Average Years At Company", ylim = c(0, 10)), y = YearsAtCompany_PCA, label = YearsAtCompany_PCA, pos = 3)
+```
+
+```{r, echo=FALSE}
+TotalWorkingYears_PCA <- c(mean(employees$TotalWorkingYears), mean(employees$TotalWorkingYears[employees$`pam_fit_PCA$clustering`==1]), mean(employees$TotalWorkingYears[employees$`pam_fit_PCA$clustering`==2]), mean(employees$TotalWorkingYears[employees$`pam_fit_PCA$clustering`==3]), mean(employees$TotalWorkingYears[employees$`pam_fit_PCA$clustering`==4]))
+TotalWorkingYears_PCA <- round(TotalWorkingYears_PCA, 1)
+
+text(x = barplot(TotalWorkingYears_PCA, names.arg = c("All Employees", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4"), ylab = "Average Total Working Years", ylim = c(0, 15)), y = TotalWorkingYears_PCA, label = TotalWorkingYears_PCA, pos = 3)
+```
+
+```{r, echo=FALSE}
+JobLevel_PCA <- c(mean(employees$JobLevel), mean(employees$JobLevel[employees$`pam_fit_PCA$clustering`==1]), mean(employees$JobLevel[employees$`pam_fit_PCA$clustering`==2]), mean(employees$JobLevel[employees$`pam_fit_PCA$clustering`==3]), mean(employees$JobLevel[employees$`pam_fit_PCA$clustering`==4]))
+JobLevel_PCA <- round(JobLevel_PCA, 1)
+
+text(x = barplot(JobLevel_PCA, names.arg = c("All Employees", "Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4"), ylab = "Average Job Level", ylim = c(0, 3)), y = JobLevel_PCA, label = JobLevel_PCA, pos = 3)
+```
+
+```{r, echo=FALSE}
+All.Employees.Dept.PCA <- c(table(employees$Department)[1]/sum(table(employees$Department)), table(employees$Department)[2]/sum(table(employees$Department)), table(employees$Department)[3]/sum(table(employees$Department)))
+C1.Employees.Dept.PCA <- c(table(employees$Department[employees$`pam_fit_PCA$clustering`==1])[1]/sum(table(employees$Department[employees$`pam_fit_PCA$clustering`==1])), table(employees$Department[employees$`pam_fit_PCA$clustering`==1])[2]/sum(table(employees$Department[employees$`pam_fit_PCA$clustering`==1])), table(employees$Department[employees$`pam_fit_PCA$clustering`==1])[3]/sum(table(employees$Department[employees$`pam_fit_PCA$clustering`==1])))
+C2.Employees.Dept.PCA <- c(table(employees$Department[employees$`pam_fit_PCA$clustering`==2])[1]/sum(table(employees$Department[employees$`pam_fit_PCA$clustering`==2])), table(employees$Department[employees$`pam_fit_PCA$clustering`==2])[2]/sum(table(employees$Department[employees$`pam_fit_PCA$clustering`==2])), table(employees$Department[employees$`pam_fit_PCA$clustering`==2])[3]/sum(table(employees$Department[employees$`pam_fit_PCA$clustering`==2])))
+C3.Employees.Dept.PCA <- c(table(employees$Department[employees$`pam_fit_PCA$clustering`==3])[1]/sum(table(employees$Department[employees$`pam_fit_PCA$clustering`==3])), table(employees$Department[employees$`pam_fit_PCA$clustering`==3])[2]/sum(table(employees$Department[employees$`pam_fit_PCA$clustering`==3])), table(employees$Department[employees$`pam_fit_PCA$clustering`==3])[3]/sum(table(employees$Department[employees$`pam_fit_PCA$clustering`==3])))
+C4.Employees.Dept.PCA <- c(table(employees$Department[employees$`pam_fit_PCA$clustering`==4])[1]/sum(table(employees$Department[employees$`pam_fit_PCA$clustering`==4])), table(employees$Department[employees$`pam_fit_PCA$clustering`==4])[2]/sum(table(employees$Department[employees$`pam_fit_PCA$clustering`==4])), table(employees$Department[employees$`pam_fit_PCA$clustering`==4])[3]/sum(table(employees$Department[employees$`pam_fit_PCA$clustering`==4])))
+Departments.PCA <- as.data.frame(cbind(c("All", "All", "All", "Cluster 1", "Cluster 1", "Cluster 1", "Cluster 2", "Cluster 2", "Cluster 2", "Cluster 3", "Cluster 3", "Cluster 3", "Cluster 4", "Cluster 4", "Cluster 4"), c("Human Resources", "Research & Development", "Sales", "Human Resources", "Research & Development", "Sales", "Human Resources", "Research & Development", "Sales", "Human Resources", "Research & Development", "Sales", "Human Resources", "Research & Development", "Sales"), c(All.Employees.Dept, C1.Employees.Dept, C2.Employees.Dept, C3.Employees.Dept.PCA, C4.Employees.Dept.PCA)), row.names = FALSE)
+colnames(Departments.PCA) <- c("Group", "Department", "Percentage")
+Departments.PCA$Percentage <- round(as.numeric(as.character(Departments.PCA$Percentage)), 2)
+
+ggplot(Departments.PCA, aes(factor(Group), Percentage, fill = Department)) +
+  geom_bar(stat="identity", position = "dodge") + 
+  scale_fill_brewer(palette = "Set1") +
+  scale_x_discrete(name ="Group")
+```
+
+If you compare these plots to the plots generated from the cluster analysis with 2 clusters that did not use PCA, you can see that there is actually less variance between the clusters than previously seen.  We will also run a quick test of cluster stability with the 'clusterboot' function to further test whether a smaller number of clusters is the preferred route to proceed.
+
+### Check Cluster Stability
+
+```{r, include=FALSE}
+library(fpc)
+
+cboot.pam2 <- clusterboot(employees_PCA, clustermethod = pamkCBI, k=2)
+```
+
+2 Clusters
+
+```{r}
+cboot.pam2$bootmean
+cboot.pam2$bootbrd
+```
+
+```{r, include=FALSE}
+cboot.pam4 <- clusterboot(employees_PCA, clustermethod = pamkCBI, k=4)
+```
+
+4 Clusters
+
+```{r}
+cboot.pam4$bootmean
+cboot.pam4$bootbrd
+```
+
+Checking the results from the stability tests confirms the idea that using a smaller number of clusters should be the preferred route going forward, since the clustering at k=2 dissolved a significantly fewer number of times than k=4.
+
+However, one of the variables that displayed significant differences betwen the clusters was the employee's Job Department.  This fact is an important indicator for where we should take the next steps of the analysis.  If we break out the employee data into 3 different groups based on Department (Human Resources, Sales, and Research & Development), we could then use a smaller number of clusters on each to determine important differences between groups within a given department.
+
+This approach has more practical implications too, since it would allow managers at the department-level to act more locally on these results, rather than just using the insights found from this analysis on a company-wide level.  Plus, with jobs differing so much in responsibility and classification from one another, this is probably the more appropriate level of detail to do some preliminary grouping on job similarities.  Then, other higher attrition characteristics can be found based on other variables, rather than the most obvious job department/role differences found above.
+
+## Part 2 - Clustering By Department
+
+We will build on the results we found in Part 1 by attempting to use a smaller number of clusters (for each department) and also by not applying PCA to the data.  The results without PCA resulted in smaller, more stable clusters with more observable differences, so we will use that same approach again.  It was worth a try to see the results of PCA, but as mentioned above, PCA is not ideally suited for categorical variables, so even after converting them to binary varialbes, it is probably not too surprising that the results did not seem as good.  However, the Gower distance with PAM approach is suited for categorical and mixed data type variables, which helps explain why this method worked well.
+
+### PAM Clustering with Gower Distance on Human Resources Department
+
+```{r}
+employees_HR <- employees[employees$Department == 'Human Resources',]
+employees_scaled_HR <- employees_scaled[employees_scaled$Department == 'Human Resources',]
+
+gower_dist_HR <- daisy(employees_scaled_HR, metric = "gower")
+
+sil_width <- c(NA)
+for(i in 2:8){  
+  pam_fit_HR <- pam(gower_dist_HR, diss = TRUE, k = i)  
+  sil_width[i] <- pam_fit_HR$silinfo$avg.width  
+}
+plot(1:8, sil_width,
+     xlab = "Number of clusters",
+     ylab = "Silhouette Width")
+lines(1:8, sil_width)
+```
+
+For the Human Resources department, the plot shows that 2 is the best number of clusters to use.
+
+```{r}
+k <- 2
+pam_fit_HR <- pam(gower_dist_HR, diss = TRUE, k)
+
+pam_results_HR <- employees_HR %>%
+  mutate(cluster = pam_fit_HR$clustering) %>%
+  group_by(cluster) %>%
+  do(the_summary = summary(.))
+
+employees_HR <- cbind(employees_HR, pam_fit_HR$clustering)
+```
+
+Just as before, we will plot the difference in the attrition rates of the two clusters, along with differences in key attributes between the two.
+
+```{r, echo=FALSE}
+Attrition_HR <- c(table(employees_HR$Attrition)[2]/sum(table(employees_HR$Attrition)), table(employees_HR$Attrition[employees_HR$`pam_fit_HR$clustering`==1])[2]/  sum(table(employees_HR$Attrition[employees_HR$`pam_fit_HR$clustering`==1])), table(employees_HR$Attrition[employees_HR$`pam_fit_HR$clustering`==2])[2]/  sum(table(employees_HR$Attrition[employees_HR$`pam_fit_HR$clustering`==2])))                   
+Attrition_HR <- round(Attrition_HR, 3)
+
+text(x = barplot(Attrition_HR, names.arg = c("All Human Resources", "HR Cluster 1", "HR Cluster 2"), ylab = "Percentage Attrition", ylim = c(0, 0.25)), y = Attrition_HR, label = Attrition_HR, pos = 3)
+```
+
+```{r, echo=FALSE}
+Age_HR <- c(mean(employees_HR$Age), mean(employees_HR$Age[employees_HR$`pam_fit_HR$clustering`==1]), mean(employees_HR$Age[employees_HR$`pam_fit_HR$clustering`==2]))
+Age_HR <- round(Age_HR, 1)
+
+text(x = barplot(Age_HR, names.arg = c("All Human Resources", "HR Cluster 1", "HR Cluster 2"), ylab = "Average Age", ylim = c(0, 55)), y = Age_HR, label = Age_HR, pos = 3)
+```
+
+```{r, echo=FALSE}
+JobLevel_HR <- c(mean(employees_HR$JobLevel), mean(employees_HR$JobLevel[employees_HR$`pam_fit_HR$clustering`==1]), mean(employees_HR$JobLevel[employees_HR$`pam_fit_HR$clustering`==2]))
+JobLevel_HR <- round(JobLevel_HR, 1)
+
+text(x = barplot(JobLevel_HR, names.arg = c("All Human Resources", "HR Cluster 1", "HR Cluster 2"), ylab = "Average Job Level", ylim = c(0, 5)), y = JobLevel_HR, label = JobLevel_HR, pos = 3)
+```
+
+```{r, echo=FALSE}
+MonthlyIncome_HR <- c(mean(employees_HR$MonthlyIncome), mean(employees_HR$MonthlyIncome[employees_HR$`pam_fit_HR$clustering`==1]), mean(employees_HR$MonthlyIncome[employees_HR$`pam_fit_HR$clustering`==2]))
+MonthlyIncome_HR <- round(MonthlyIncome_HR, 1)
+
+text(x = barplot(MonthlyIncome_HR, names.arg = c("All Human Resources", "HR Cluster 1", "HR Cluster 2"), ylab = "Average Monthly Income", ylim = c(0, 20000)), y = MonthlyIncome_HR, label = MonthlyIncome_HR, pos = 3)
+```
+
+```{r, echo=FALSE}
+TotalWorkingYears_HR <- c(mean(employees_HR$TotalWorkingYears), mean(employees_HR$TotalWorkingYears[employees_HR$`pam_fit_HR$clustering`==1]), mean(employees_HR$TotalWorkingYears[employees_HR$`pam_fit_HR$clustering`==2]))
+TotalWorkingYears_HR <- round(TotalWorkingYears_HR, 1)
+
+text(x = barplot(TotalWorkingYears_HR, names.arg = c("All Human Resources", "HR Cluster 1", "HR Cluster 2"), ylab = "Average Total Working Years", ylim = c(0, 30)), y = TotalWorkingYears_HR, label = TotalWorkingYears_HR, pos = 3)
+```
+
+```{r, echo=FALSE}
+YearsAtCompany_HR <- c(mean(employees_HR$YearsAtCompany), mean(employees_HR$YearsAtCompany[employees_HR$`pam_fit_HR$clustering`==1]), mean(employees_HR$YearsAtCompany[employees_HR$`pam_fit_HR$clustering`==2]))
+YearsAtCompany_HR <- round(YearsAtCompany_HR, 1)
+
+text(x = barplot(YearsAtCompany_HR, names.arg = c("All Human Resources", "HR Cluster 1", "HR Cluster 2"), ylab = "Average Years at Company", ylim = c(0, 18)), y = YearsAtCompany_HR, label = YearsAtCompany_HR, pos = 3)
+```
+
+From looking at these plots, you can start to see a very clear story about the types of employees who are more likely to leave within the Human Resources department.  One cluster actually has 0% attrition, but this cluster is significantly older, has been working for a much longer number of years, gets paid a lot more, and holds higher, more senior job roles.  The cluster that is younger, gets paid less, and holds lower positions accounts for all of the attrition within HR.  This breakdown gives us a very good look at the different characteristics between the two groups, and we will see if similar trends emerge in Research & Development and Sales.
+
+### PAM Clustering with Gower Distance on Research & Development Department
+
+```{r}
+employees_rd <- employees[employees$Department == 'Research & Development',]
+employees_scaled_rd <- employees_scaled[employees_scaled$Department == 'Research & Development',]
+
+gower_dist_rd <- daisy(employees_scaled_rd, metric = "gower")
+
+sil_width <- c(NA)
+for(i in 2:8){  
+  pam_fit_rd <- pam(gower_dist_rd, diss = TRUE, k = i)  
+  sil_width[i] <- pam_fit_rd$silinfo$avg.width  
+}
+plot(1:8, sil_width,
+     xlab = "Number of clusters",
+     ylab = "Silhouette Width")
+lines(1:8, sil_width)
+```
+
+This Silhouette plot actually shows that 7 would be the ideal number of clusters, but in keeping with our conclusions from Part 1 to keep as small a number of clusters as possible, we will choose k=4 instead.  There is also a peak in the coefficient value at 4, even though it is not as high as 7, but the tradeoff for greater simplicity is worth it in this case.
+
+```{r}
+k <- 4
+pam_fit_rd <- pam(gower_dist_rd, diss = TRUE, k)
+
+pam_results_rd <- employees_rd %>%
+  mutate(cluster = pam_fit_rd$clustering) %>%
+  group_by(cluster) %>%
+  do(the_summary = summary(.))
+
+employees_rd <- cbind(employees_rd, pam_fit_rd$clustering)
+```
+
+```{r, echo=FALSE}
+Attrition_rd <- c(table(employees_rd$Attrition)[2]/sum(table(employees_rd$Attrition)), table(employees_rd$Attrition[employees_rd$`pam_fit_rd$clustering`==1])[2]/  sum(table(employees_rd$Attrition[employees_rd$`pam_fit_rd$clustering`==1])), table(employees_rd$Attrition[employees_rd$`pam_fit_rd$clustering`==2])[2]/  sum(table(employees_rd$Attrition[employees_rd$`pam_fit_rd$clustering`==2])),
+table(employees_rd$Attrition[employees_rd$`pam_fit_rd$clustering`==3])[2]/  sum(table(employees_rd$Attrition[employees_rd$`pam_fit_rd$clustering`==3])), table(employees_rd$Attrition[employees_rd$`pam_fit_rd$clustering`==4])[2]/  sum(table(employees_rd$Attrition[employees_rd$`pam_fit_rd$clustering`==4])))                   
+Attrition_rd <- round(Attrition_rd, 3)
+
+text(x = barplot(Attrition_rd, names.arg = c("All R&D", "R&D 1", "R&D 2", "R&D 3", "R&D 4"), ylab = "Percentage Attrition", ylim = c(0, 0.25)), y = Attrition_rd, label = Attrition_rd, pos = 3)
+```
+
+There are significant differences in the attrition rates between these 4 clusters, so now we will examine how they most differ once again on several of the varialbes.
+
+```{r, echo=FALSE}
+Age_rd <- c(mean(employees_rd$Age), mean(employees_rd$Age[employees_rd$`pam_fit_rd$clustering`==1]), mean(employees_rd$Age[employees_rd$`pam_fit_rd$clustering`==2]), mean(employees_rd$Age[employees_rd$`pam_fit_rd$clustering`==3]), mean(employees_rd$Age[employees_rd$`pam_fit_rd$clustering`==4]))
+Age_rd <- round(Age_rd, 1)
+
+text(x = barplot(Age_rd, names.arg = c("All R&D", "R&D 1", "R&D 2", "R&D 3", "R&D 4"), ylab = "Average Age", ylim = c(0, 55)), y = Age_rd, label = Age_rd, pos = 3)
+```
+
+Just looking at the age chart, you can see that older employees have the lowest attrition rate, while the two clusters with the youngest employees have the two highest attrition rates.  This relationship between age and attrition is one that continues to hold true across the different analyses.
+
+```{r, echo=FALSE}
+Gender_rd <- c(table(employees_rd$Gender)[2]/sum(table(employees_rd$Gender)), table(employees_rd$Gender[employees_rd$`pam_fit_rd$clustering`==1])[2]/  sum(table(employees_rd$Gender[employees_rd$`pam_fit_rd$clustering`==1])), table(employees_rd$Gender[employees_rd$`pam_fit_rd$clustering`==2])[2]/  sum(table(employees_rd$Gender[employees_rd$`pam_fit_rd$clustering`==2])),
+table(employees_rd$Gender[employees_rd$`pam_fit_rd$clustering`==3])[2]/  sum(table(employees_rd$Gender[employees_rd$`pam_fit_rd$clustering`==3])), table(employees_rd$Gender[employees_rd$`pam_fit_rd$clustering`==4])[2]/  sum(table(employees_rd$Gender[employees_rd$`pam_fit_rd$clustering`==4])))                   
+Gender_rd <- round(Gender_rd, 2)
+
+text(x = barplot(Gender_rd, names.arg = c("All R&D", "R&D 1", "R&D 2", "R&D 3", "R&D 4"), ylab = "Percentage Male", ylim = c(0, 0.8)), y = Gender_rd, label = Gender_rd, pos = 3)
+```
+
+One interesting observation is that one of the clusters with the higher attrition is only about 33% male.  This is even more striking since 61% of all Research & Development employees are male, so this group has really differentiated itself along gender lines.
+
+```{r, echo=FALSE}
+MaritalStatus_rd <- c(table(employees_rd$MaritalStatus)[2]/sum(table(employees_rd$MaritalStatus)), table(employees_rd$MaritalStatus[employees_rd$`pam_fit_rd$clustering`==1])[2]/  sum(table(employees_rd$MaritalStatus[employees_rd$`pam_fit_rd$clustering`==1])), table(employees_rd$MaritalStatus[employees_rd$`pam_fit_rd$clustering`==2])[2]/  sum(table(employees_rd$MaritalStatus[employees_rd$`pam_fit_rd$clustering`==2])),
+table(employees_rd$MaritalStatus[employees_rd$`pam_fit_rd$clustering`==3])[2]/  sum(table(employees_rd$MaritalStatus[employees_rd$`pam_fit_rd$clustering`==3])), table(employees_rd$MaritalStatus[employees_rd$`pam_fit_rd$clustering`==4])[2]/  sum(table(employees_rd$MaritalStatus[employees_rd$`pam_fit_rd$clustering`==4])))                   
+MaritalStatus_rd <- round(MaritalStatus_rd, 2)
+
+text(x = barplot(MaritalStatus_rd, names.arg = c("All R&D", "R&D 1", "R&D 2", "R&D 3", "R&D 4"), ylab = "Percentage Married", ylim = c(0, 0.8)), y = MaritalStatus_rd, label = MaritalStatus_rd, pos = 3)
+```
+
+If you look at Marital Status, you can also see some significant differences, especially between the two clusters with the higher attrition.  One of them is majority male, 79% of whom are not married, while the other is two-thirds female, 71% of whom are married.  When targeting these two groups with efforts to try to reduce attrition, these demographic characteristics are very important to keep in mind for different potential initiatives.
+
+```{r, echo=FALSE}
+YearsAtCompany_rd <- c(mean(employees_rd$YearsAtCompany), mean(employees_rd$YearsAtCompany[employees_rd$`pam_fit_rd$clustering`==1]), mean(employees_rd$YearsAtCompany[employees_rd$`pam_fit_rd$clustering`==2]), mean(employees_rd$YearsAtCompany[employees_rd$`pam_fit_rd$clustering`==3]), mean(employees_rd$YearsAtCompany[employees_rd$`pam_fit_rd$clustering`==4]))
+YearsAtCompany_rd <- round(YearsAtCompany_rd, 1)
+
+text(x = barplot(YearsAtCompany_rd, names.arg = c("All R&D", "R&D 1", "R&D 2", "R&D 3", "R&D 4"), ylab = "Average Years At Company", ylim = c(0, 15)), y = YearsAtCompany_rd, label = YearsAtCompany_rd, pos = 3)
+```
+
+```{r, echo=FALSE}
+All.rd <- c(table(employees_rd$JobRole)[1]/sum(table(employees_rd$JobRole)), table(employees_rd$JobRole)[3]/sum(table(employees_rd$JobRole)), table(employees_rd$JobRole)[4]/sum(table(employees_rd$JobRole)),
+table(employees_rd$JobRole)[5]/sum(table(employees_rd$JobRole)), table(employees_rd$JobRole)[6]/sum(table(employees_rd$JobRole)),  
+table(employees_rd$JobRole)[7]/sum(table(employees_rd$JobRole)))
+C1.rd <- c(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==1])[1]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==1])), table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==1])[3]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==1])), table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==1])[4]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==1])),
+table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==1])[5]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==1])), table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==1])[6]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==1])), table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==1])[7]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==1])))                              
+C2.rd <- c(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==2])[1]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==2])), table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==2])[3]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==2])), table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==2])[4]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==2])),
+table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==2])[5]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==2])), table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==2])[6]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==2])), table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==2])[7]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==2])))       
+C3.rd <- c(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==3])[1]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==3])), table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==3])[3]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==3])), table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==3])[4]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==3])),
+table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==3])[5]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==3])), table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==3])[6]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==3])), table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==3])[7]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==3])))   
+C4.rd <- c(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==4])[1]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==4])), table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==4])[3]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==4])), table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==4])[4]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==4])),
+table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==4])[5]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==4])), table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==4])[6]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==4])), table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==4])[7]/sum(table(employees_rd$JobRole[employees_rd$`pam_fit_rd$clustering`==4])))   
+JobRoles.rd <- as.data.frame(cbind(c("All", "All", "All", "All", "All", "All", "Cluster 1", "Cluster 1", "Cluster 1", "Cluster 1", "Cluster 1", "Cluster 1", "Cluster 2", "Cluster 2", "Cluster 2", "Cluster 2", "Cluster 2", "Cluster 2", "Cluster 3", "Cluster 3", "Cluster 3", "Cluster 3", "Cluster 3", "Cluster 3", "Cluster 4", "Cluster 4", "Cluster 4", "Cluster 4", "Cluster 4", "Cluster 4"), c("HC Rep", "Lab Tech", "Manager", "Manufacturing Director", "Research Director", "Research Scientist", "HC Rep", "Lab Tech", "Manager", "Manufacturing Director", "Research Director", "Research Scientist", "HC Rep", "Lab Tech", "Manager", "Manufacturing Director", "Research Director", "Research Scientist", "HC Rep", "Lab Tech", "Manager", "Manufacturing Director", "Research Director", "Research Scientist", "HC Rep", "Lab Tech", "Manager", "Manufacturing Director", "Research Director", "Research Scientist"), c(All.rd, C1.rd, C2.rd, C3.rd, C4.rd)), row.names = FALSE)
+colnames(JobRoles.rd) <- c("Group", "JobRole", "Percentage")
+JobRoles.rd$Percentage <- round(as.numeric(as.character(JobRoles.rd$Percentage)), 2)
+
+ggplot(JobRoles.rd, aes(factor(Group), Percentage, fill = JobRole)) +
+  geom_bar(stat="identity", position = "dodge") + 
+  scale_fill_brewer(palette = "Set1") +
+  scale_x_discrete(name ="Group")
+```
+
+These last two plots illustrate the key differences between the jobs in each cluster.  The two clusters with the lowest attrition consist of research scientists and research directors, respectively.  The two clusters with the higher attrition consist of lab techs, which are lower level jobs.  The research directors are also primarily made up of more senior people who have worked at the company for a longer period of time. 
+
+### PAM Clustering with Gower Distance on Sales Department
+
+```{r}
+employees_sales <- employees[employees$Department == 'Sales',]
+employees_scaled_sales <- employees_scaled[employees_scaled$Department == 'Sales',]
+
+gower_dist_sales <- daisy(employees_scaled_sales, metric = "gower")
+
+sil_width <- c(NA)
+for(i in 2:8){  
+  pam_fit_sales <- pam(gower_dist_sales, diss = TRUE, k = i)  
+  sil_width[i] <- pam_fit_sales$silinfo$avg.width  
+}
+plot(1:8, sil_width,
+     xlab = "Number of clusters",
+     ylab = "Silhouette Width")
+lines(1:8, sil_width)
+```
+
+This chart of the Silhouette coefficients shows that 2 is the ideal number of clusters to use for the Sales department.
+
+```{r}
+k <- 2
+pam_fit_sales <- pam(gower_dist_sales, diss = TRUE, k)
+
+pam_results_sales <- employees_sales %>%
+  mutate(cluster = pam_fit_sales$clustering) %>%
+  group_by(cluster) %>%
+  do(the_summary = summary(.))
+
+employees_sales <- cbind(employees_sales, pam_fit_sales$clustering)
+```
+
+```{r, echo=FALSE}
+Attrition_sales <- c(table(employees_sales$Attrition)[2]/sum(table(employees_sales$Attrition)), table(employees_sales$Attrition[employees_sales$`pam_fit_sales$clustering`==1])[2]/  sum(table(employees_sales$Attrition[employees_sales$`pam_fit_sales$clustering`==1])), table(employees_sales$Attrition[employees_sales$`pam_fit_sales$clustering`==2])[2]/  sum(table(employees_sales$Attrition[employees_sales$`pam_fit_sales$clustering`==2])))                   
+Attrition_sales <- round(Attrition_sales, 3)
+
+text(x = barplot(Attrition_sales, names.arg = c("All Sales", "Cluster 1", "Cluster 2"), ylab = "Percentage Attrition", ylim = c(0, 0.35)), y = Attrition_sales, label = Attrition_sales, pos = 3)
+```
+
+This breakdown shows that while Sales has a higher rate of attrition in general than the company overall, there is still a clear difference between a higher-attrition group and a lower-attrition group within Sales.
+
+```{r, echo=FALSE}
+MonthlyIncome_sales <- c(mean(employees_sales$MonthlyIncome), mean(employees_sales$MonthlyIncome[employees_sales$`pam_fit_sales$clustering`==1]), mean(employees_sales$MonthlyIncome[employees_sales$`pam_fit_sales$clustering`==2]))
+MonthlyIncome_sales <- round(MonthlyIncome_sales, 1)
+
+text(x = barplot(MonthlyIncome_sales, names.arg = c("All Sales", "Cluster 1", "Cluster 2"), ylab = "Average Monthly Income", ylim = c(0, 8000)), y = MonthlyIncome_sales, label = MonthlyIncome_sales, pos = 3)
+```
+
+```{r, echo=FALSE}
+Gender_sales <- c(table(employees_sales$Gender)[2]/sum(table(employees_sales$Gender)), table(employees_sales$Gender[employees_sales$`pam_fit_sales$clustering`==1])[2]/  sum(table(employees_sales$Gender[employees_sales$`pam_fit_sales$clustering`==1])), table(employees_sales$Gender[employees_sales$`pam_fit_sales$clustering`==2])[2]/  sum(table(employees_sales$Gender[employees_sales$`pam_fit_sales$clustering`==2])))                
+Gender_sales <- round(Gender_sales, 2)
+
+text(x = barplot(Gender_sales, names.arg = c("All Sales", "Cluster 1", "Cluster 2"), ylab = "Percentage Male", ylim = c(0, 0.8)), y = Gender_sales, label = Gender_sales, pos = 3)
+```
+
+```{r, echo=FALSE}
+MaritalStatus_sales <- c(table(employees_sales$MaritalStatus)[2]/sum(table(employees_sales$MaritalStatus)), 
+                         table(employees_sales$MaritalStatus[employees_sales$`pam_fit_sales$clustering`==1])[2]/sum(table(employees_sales$MaritalStatus[employees_sales$`pam_fit_sales$clustering`==1])), 
+                         table(employees_sales$MaritalStatus[employees_sales$`pam_fit_sales$clustering`==2])[2]/  sum(table(employees_sales$MaritalStatus[employees_sales$`pam_fit_sales$clustering`==2])))        
+MaritalStatus_sales <- round(MaritalStatus_sales, 2)
+
+text(x = barplot(MaritalStatus_sales, names.arg = c("All Sales", "Cluster 1", "Cluster 2"), ylab = "Percentage Married", ylim = c(0, 0.8)), y = MaritalStatus_sales, label = MaritalStatus_sales, pos = 3)
+```
+
+```{r, echo=FALSE}
+YearsAtCompany_sales <- c(mean(employees_sales$YearsAtCompany), mean(employees_sales$YearsAtCompany[employees_sales$`pam_fit_sales$clustering`==1]), mean(employees_sales$YearsAtCompany[employees_sales$`pam_fit_sales$clustering`==2]))
+YearsAtCompany_sales <- round(YearsAtCompany_sales, 1)
+
+text(x = barplot(YearsAtCompany_sales, names.arg = c("All Sales", "Cluster 1", "Cluster 2"), ylab = "Average Years at Company", ylim = c(0, 10)), y = YearsAtCompany_sales, label = YearsAtCompany_sales, pos = 3)
+```
+
+These plots help to illustrate the difference between the two sales clusters.  The group with higher attrition is more female, gets paid less, is married less often, and has worked for the company for fewer years.  The group with less attrition is more male, gets paid more, is majority married, and has been at the company longer.  
+
+### Conclusions
+
+This analysis attempts to find important characteristics of employeees at a company who are more likely to leave.  By looking at clusters by Department, we are also able to get down to a higher level of detail and allow managers to put more actionable, department-specific results into action.  The characteristics of the at-risk clusters for each department as summarized as follows:
+
+Human Resources - Younger, lower paid, hold lower level positions, worked at company for fewer years
+
+Research & Development - Laboratory technicians, female/married, male/not married
+
+Sales - Females, not married, worked at company for fewer years
+
+There are many different ways that future studies could further this analysis.  Specifically, with as many variables as there are in the data, different breakdowns could be performed.  It might be interesting to break out males and females to see what trends occur, as well as age or how long an employee has worked at the company.
