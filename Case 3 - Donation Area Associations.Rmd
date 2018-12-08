@@ -1,0 +1,257 @@
+---
+title: "Market Basket Analysis Using Association Rule Mining for Donations"
+output: rmarkdown::github_document
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+```
+## Introduction
+
+This analysis looked at a dataset of donations made by a group of individuals to a higher education institution during the 2018 fiscal year.  We wanted to do a market basket analysis using association rule mining to determine if there were certain areas of the university a donor was more likely to make a gift to based on other area(s) to which they might have given during the same fiscal year.
+
+Identifying these trends can be very useful to higher education fundraisers.  As development becomes increasingly important to schools to fund their annual budgets, discovering these trends can help staff target their constituents much more effectively with solicitations to the areas in which they would be most likely to give.
+
+## The Data
+
+```{r include=FALSE}
+donations <- read.csv("C:/Users/Lucy's House/Desktop/Class/BZAN 552 - Data Mining/Final Projects/Case 3 - Donations/Giving Areas2.csv")
+donations$GENDER[donations$GENDER ==  ' '] <- 'U'
+donations$MARITAL_STATUS <- toupper(donations$MARITAL_STATUS)
+donations$MARITAL_STATUS[donations$MARITAL_STATUS ==  ' '] <- 'U'
+donations$GENDER <- as.character(donations$GENDER)
+donations$MARITAL_STATUS <- as.character(donations$MARITAL_STATUS)
+library(arules)
+library(dplyr)
+library(dummies)
+library(glmnet)
+library(caret)
+library(AUC)
+```
+
+The dataset consisted of 8,529 unique rows of giving information and basic demographic/biographic details for each individual who made a gift to the College of Business in Fiscal Year 2018.  There were 4,579 unique donors in the dataset, because donors would have multiple rows if they gave to multiple departments in the same fiscal year.  The 8 variables included were:
+
+ID_NUMBER - unique ID number for each donor
+
+GIFT_DEPARTMENT - department to which a gift was made
+
+GIFT_SCHOOL - college/area to which a gift was made
+
+AGE
+
+GENDER - F (Female) / M (Male) / U (Unknown)
+
+MARITAL_STATUS - F (Formerly married) / M (Married) / P (Domestic Partner) / S (Single) / 
+                 U (Unknown) / W (Widowed) / Z (Deceased Spouse)
+
+GRADUATION_YR
+
+MAJOR - 4-digit code for major
+
+## Approach
+
+Our approach to this problem was broken down into two steps:
+
+1)  Use association rule mining to determine relationships with giving between the College of Business and other departments
+
+2)  Identify the other department contained in the top association rule - by lift - and build a model on the demographic characteristics of the donors to predict the donors who would be most likely to give to both
+
+### Cleaning & Formatting the Data
+
+Before assocation rule mining could begin, several steps needed to be taken to clean and format the data to get it into the proper format for analysis.  Here is a brief look at the original data, along with the data types for each variable:
+
+```{r, echo=FALSE}
+str(donations)
+```
+
+The first thing we needed to do was narrow down the dataset just to the columns we needed to convert this data frame to a Transactions object so that we could run the 'arules' algorithm on it.  The only two columns we needed for that were ID_NUMBER and GIFT_DEPARTMENT.  After some thought, it was determined this was the best level to do the assocation rule mining.  Since all of the donors in this file had made a gift to the College of Business - which would have been contained at the GIFT_SCHOOL level - any results we tried to find using GIFT_SCHOOL would have very limited usefulness.  That's because the confidence for all of the generated rules for gifts to the College of Business would have been 1, since everyone in the file had done this.
+
+We then needed to remove duplicate rows, since people could have given to different departments under the same school.  These rows would have been unique in the original file but no longer in the smaller file.  After removing duplicates, we were then left with 7,461 rows.  From there, we could then take the final step of coverting the data to the Transactions object.
+
+```{r, echo=FALSE}
+donations.dept <- donations[,c('ID_NUMBER', 'GIFT_DEPARTMENT')]
+donations.dept <- distinct(donations.dept)
+donations_list_dept <- split(donations.dept[,"GIFT_DEPARTMENT"], donations.dept[,"ID_NUMBER"])
+donations.dept.trans <- as(donations_list_dept, "transactions")
+donations.dept.trans
+```
+
+## Part 1 - Association Rule Mining 
+
+At this point, we were ready to rule the 'arules' algorithm on the transactions dataset.  We lowered the support paramter to 0.005 and the confidence parameter to 0.6 in order to generate a broader set of rules.
+
+```{r}
+donation_rules_dept <- apriori(donations.dept.trans, 
+                                  parameter = list(sup = 0.005, conf = 0.6, minlen=2)) %>% sort(by="lift")
+summary(donation_rules_dept)
+inspect(donation_rules_dept[1:10])
+```
+
+This run generated a set of 33 rules, but with a quick review of the Top 10 (by lift), we could see that there were some redundant rules we needed to address.  After we did, we were then left with 22 rules and looked at the top 10 in greater detail.
+
+```{r}
+subset.matrix <- is.subset(donation_rules_dept, donation_rules_dept)
+redundant <- colSums(subset.matrix) > 1
+donation.rules.dept.reduced <- donation_rules_dept[!redundant] 
+summary(donation.rules.dept.reduced)
+inspect(donation.rules.dept.reduced[1:10])
+```
+
+The top 2 rules involved associations with departments that were not related to the College of Business, so we skipped down to #3 to find the first one that did.  From there, 3-10 all had associations between giving to the Department of Business Administration and other departments to the university.  The top 5 by lift were:
+
+1)  Scholarships - Campus Wide
+2)  College of Education
+3)  Women's Basketball
+4)  General Administration - System Wide
+5)  College of Arts & Sciences
+
+## Part 2 - Predictive Modeling
+
+Once we determined what the top association rules were for giving to other departments with giving to the College of Business, we turned our attention to building a predictive model.  This would allow us to better determine which characteristics from the demo/bio data could help predict the profile of people who might be the best prospects to give to two areas.  For our analysis, we decided to pick the top rule - giving to Scholarships.  So more specifically, the question became:  What types of donors are most likely to make gifts to both the Department of Business Administration and to Scholarships?
+
+```{r, echo=FALSE}
+Departments <- c(unique(length(donations.dept$ID_NUMBER[donations.dept$GIFT_DEPARTMENT=="Business Administration - Admin-UTK"])), unique(length(donations.dept$ID_NUMBER[donations.dept$GIFT_DEPARTMENT=="Scholarships-UTK"])))
+
+text(x = barplot(Departments, names.arg = c("Bus. Admin.", "Scholarships"), ylab = "Number of Donors", xlab = "Department", ylim = c(0, 3500)), y = Departments, label = Departments, pos = 3)
+```
+
+When we looked at the data, we saw that while 3,192 donors made a gift to the Department of Business Administration in FY18, only 55 donors made a gift to Scholarships.  However, of these 55, 52 of them also made a gift to the Department of Business Administration.  Therefore, as an example, if the goal was to increase the number of donors to a particular area - such as Scholarships - and we knew there was a strong association between this department and Business Administration, which donors to Business Administration would be the best prospects to also be solicited for a gift to Scholarships?
+
+The first step we took to start this part of the analysis was to identify which 52 people had made a gift to both areas to use as our target group.
+
+```{r, include=FALSE}
+donations.dept$BA <- ifelse(donations.dept$GIFT_DEPARTMENT=='Business Administration - Admin-UTK', 1, 0)
+donations.dept$SCHOLARSHIPS <- ifelse(donations.dept$GIFT_DEPARTMENT=='Scholarships-UTK', 1, 0)
+
+donations.dept2 <- aggregate(. ~ ID_NUMBER, data=donations.dept[,c('ID_NUMBER', 'BA', 'SCHOLARSHIPS')], max)
+donations.dept2$BOTH <- donations.dept2$BA + donations.dept2$SCHOLARSHIPS
+donations.dept2$TARGET <- ifelse(donations.dept2$BOTH==2, 1, 0)
+donations.dept2 <- donations.dept2[,c('ID_NUMBER', 'TARGET')]
+
+donations.target <- merge(donations, donations.dept2, by='ID_NUMBER')
+donations.target <- donations.target[,c('ID_NUMBER', 'AGE', 'GENDER', 'MARITAL_STATUS', 'GRADUATION_YR', 'MAJOR', 
+                                        'TARGET')]
+
+donations.target <- distinct(donations.target)
+
+target.ids <- unique(donations.dept$ID_NUMBER[donations.dept$GIFT_DEPARTMENT=="Business Administration - Admin-UTK"])
+donations.target <- donations.target[donations.target$ID_NUMBER %in% target.ids,]
+```
+
+Once we did that, we went back to our original dataframe with demo/bio data and combined those characteristics with our target variables.  Then, we narrowed down the entire group of 4,579 donors to only the 3,192 donors who had made a gift to the Department of Business Administration.  Here is a short outline of what this new dataset looked like:
+
+```{r}
+str(donations.target)
+```
+
+For our predictive model, we decided to use LASSO (Least Absolute Shrinkage and Selection Operator), which required us to clean our data to get all the variables into a numeric format and also handle missing values.  To do this, we created binary/dummy variables for each of the GENDER, MARITAL_STATUS, and MAJOR categories.  We also binned the AGE and GRADUATION_YR categories into dummy variables by decade, which accomplished two things for us.  First, it allowed us to account for potential non-linearity in relationships of these variables with the target variable.  For example, in giving, sometimes the likelihood of someone making a gift increases until they hit their 60s-70s and then starts to decrease again.  This method also allowed us to handle the missing values that were present in both of these categories.
+
+```{r, include=FALSE}
+donations.target <- cbind(donations.target[,names(donations.target) != 'GENDER'], 
+                          dummy.data.frame(as.data.frame(donations.target$GENDER)))
+donations.target <- cbind(donations.target[,names(donations.target) != 'MARITAL_STATUS'], 
+                          dummy.data.frame(as.data.frame(donations.target$MARITAL_STATUS)))
+donations.target$AGE[is.na(donations.target$AGE)] <- 0
+donations.target$AGE_29_UNDER <- ifelse(donations.target$AGE<30 & donations.target$AGE>0, 1, 0)
+donations.target$AGE_30_39 <- ifelse(donations.target$AGE<40 & donations.target$AGE>29, 1, 0)
+donations.target$AGE_40_49 <- ifelse(donations.target$AGE<50 & donations.target$AGE>39, 1, 0)
+donations.target$AGE_50_59 <- ifelse(donations.target$AGE<60 & donations.target$AGE>49, 1, 0)
+donations.target$AGE_60_69 <- ifelse(donations.target$AGE<70 & donations.target$AGE>59, 1, 0)
+donations.target$AGE_70_79 <- ifelse(donations.target$AGE<80 & donations.target$AGE>69, 1, 0)
+donations.target$AGE_80_89 <- ifelse(donations.target$AGE<90 & donations.target$AGE>79, 1, 0)
+donations.target$AGE_90_PLUS <- ifelse(donations.target$AGE>89, 1, 0)
+donations.target$AGE <- NULL
+donations.target$GRADUATION_YR[is.na(donations.target$GRADUATION_YR)] <- 0
+donations.target$GRAD_YR_1910S <- ifelse(donations.target$GRADUATION_YR<1920 & donations.target$GRADUATION_YR>1909, 1, 0)
+donations.target$GRAD_YR_1920S <- ifelse(donations.target$GRADUATION_YR<1930 & donations.target$GRADUATION_YR>1919, 1, 0)
+donations.target$GRAD_YR_1930S <- ifelse(donations.target$GRADUATION_YR<1940 & donations.target$GRADUATION_YR>1929, 1, 0)
+donations.target$GRAD_YR_1940S <- ifelse(donations.target$GRADUATION_YR<1950 & donations.target$GRADUATION_YR>1939, 1, 0)
+donations.target$GRAD_YR_1950S <- ifelse(donations.target$GRADUATION_YR<1960 & donations.target$GRADUATION_YR>1949, 1, 0)
+donations.target$GRAD_YR_1960S <- ifelse(donations.target$GRADUATION_YR<1970 & donations.target$GRADUATION_YR>1959, 1, 0)
+donations.target$GRAD_YR_1970S <- ifelse(donations.target$GRADUATION_YR<1980 & donations.target$GRADUATION_YR>1969, 1, 0)
+donations.target$GRAD_YR_1980S <- ifelse(donations.target$GRADUATION_YR<1990 & donations.target$GRADUATION_YR>1979, 1, 0)
+donations.target$GRAD_YR_1990S <- ifelse(donations.target$GRADUATION_YR<2000 & donations.target$GRADUATION_YR>1989, 1, 0)
+donations.target$GRAD_YR_2000S <- ifelse(donations.target$GRADUATION_YR<2010 & donations.target$GRADUATION_YR>1999, 1, 0)
+donations.target$GRAD_YR_2010S <- ifelse(donations.target$GRADUATION_YR>2009, 1, 0)
+donations.target$GRADUATION_YR <- NULL
+donations.target <- cbind(donations.target[,names(donations.target) != 'MAJOR'], 
+                          dummy.data.frame(as.data.frame(donations.target$MAJOR)))
+donations.target$TARGET2 <- donations.target$TARGET
+donations.target$TARGET <- NULL
+names(donations.target)[ncol(donations.target)] <- 'TARGET'
+```
+
+Once all these steps were done, we were now left with a much larger dataset that contained many dummy variables for the converted categorical variables, but which was now formatted for us to be able to run LASSO.
+
+```{r}
+table(donations.target$TARGET)
+```
+
+Our data was very unbalanced as illustrated by the breakdown above (0 - did not give to Scholarships; 1 - did give to Scholarships), since only 1.6% fit into our target group.  Therefore, we decided to address this discrepancy by upsampling our data to achieve the new breakdown below:  
+
+```{r, echo=FALSE}
+donations.target$TARGET <- as.factor(donations.target$TARGET)
+donations.target2 <- as.data.frame(upSample(x = donations.target[, -ncol(donations.target)], y = donations.target$TARGET))
+colnames(donations.target2)[colnames(donations.target2) == 'Class'] <- 'TARGET'
+donations.target2$TARGET <- as.numeric(as.character(donations.target2$TARGET))
+donations.target$TARGET <- as.numeric(as.character(donations.target$TARGET))
+table(donations.target2$TARGET)
+```
+
+We then proceeded to divide our data into training, validation, and testing sets.  
+
+```{r}
+ind <- sample(x=1:nrow(donations.target2),size=nrow(donations.target2))
+train <- ind[1:round(length(donations.target2$TARGET)*0.4)]
+val <- ind[(round(length(donations.target2$TARGET)*0.4)+1):(round(length(donations.target2$TARGET)*0.8))]
+test <- ind[((round(length(donations.target2$TARGET)*0.8))+1):length(donations.target2$TARGET)]
+finaltrain <- c(train, val)
+donations.targetTRAIN <- donations.target2[train,]
+donations.targetVAL <- donations.target2[val,]
+donations.targetFINALTRAIN <- donations.target2[finaltrain,]
+donations.targetTEST <- donations.target2[test,]
+```
+
+We used a random 40% of the data to intially train the model.  
+
+```{r}
+glmnet_model <- glmnet(x = data.matrix(donations.targetTRAIN[,c(2:(ncol(donations.targetTRAIN)-1))]),
+                       y = donations.targetTRAIN$TARGET,
+                       family = 'binomial')
+```
+
+Then, we used another random 40% for validation by solving for the optimal value of lambda, using AUC as a measure. 
+
+```{r}
+aucstore <- numeric(length(glmnet_model$lambda))
+for(j in 1:length(glmnet_model$lambda)) {
+  glmnet_pred <- predict(glmnet_model,
+                         newx = data.matrix(donations.targetVAL[,c(2:(ncol(donations.targetVAL)-1))]),
+                         type = 'response',
+                         s = glmnet_model$lambda[j])
+  aucstore[j] <- AUC::auc(roc(as.numeric(glmnet_pred), as.factor(donations.targetVAL$TARGET)))
+}
+glmnet.lambda <- glmnet_model$lambda[which.max(aucstore)]
+```
+
+Once this was done, we combined the training and validation sets to train the model again, using the optimal value of lambda found in the previous step.  
+
+```{r}
+glmnet_model <- glmnet(x = data.matrix(donations.targetFINALTRAIN[,c(2:(ncol(donations.targetFINALTRAIN)-1))]),
+                       y = donations.targetFINALTRAIN$TARGET,
+                       family = 'binomial')
+```
+
+Finally, we tested this model on the 20% testing set to see how well it performed.
+
+```{r}
+glmnet_pred <- predict(glmnet_model,
+                       newx = data.matrix(donations.targetTEST[,c(2:(ncol(donations.targetTEST)-1))]),
+                       type = 'response',
+                       s = glmnet.lambda)
+AUC::auc(roc(glmnet_pred, as.factor(donations.targetTEST$TARGET)))
+plot(roc(glmnet_pred, as.factor(donations.targetTEST$TARGET)))
+```
+
+Using this approach, we obtained an AUC of 0.8, which is significantly better than random (0.5).  This result is very promising to suggest this model could be useful in better identifying prospects who would give to both Business Administration and Scholarships.
+
+This analysis has very practical results and could be improved with additional data fields on donors.  While we just looked at Age, Gender, Marital Status, Graduation Year, and Major, many schools have dozens (if not hundreds) more variables they collect on their alumni and donors that could provide better predictions around giving.  Also, while we just looked at the top association of Business Administration and Scholarships, this same approach could be used for any type of giving combinations to different areas of the university. 
