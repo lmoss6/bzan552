@@ -52,7 +52,7 @@ Before assocation rule mining could begin, several steps needed to be taken to c
     ##  $ GRADUATION_YR  : int  NA 2018 NA NA 2017 NA NA NA 2018 NA ...
     ##  $ MAJOR          : Factor w/ 197 levels ""," ","C100",..: 1 45 1 1 176 1 1 1 122 1 ...
 
-The first thing we needed to do was narrow down the dataset just to the columns we needed to convert this data frame to a Transactions object so that we could run the 'arules' algorithm on it. The only two columns we needed for that were ID\_NUMBER and GIFT\_DEPARTMENT. After some thought, it was determined this was the best level to do the assocation rule mining. Since all of the donors in this file had made a gift to the College of Business - which would have been contained at the GIFT\_SCHOOL level - any results we tried to find using GIFT\_SCHOOL would have very limited usefulness. That's because the confidence for all of the generated rules for gifts to the College of Business would have been 1, since everyone in the file had done this.
+The first thing we did was narrow down the dataset to just the columns we needed to convert this data frame to a Transactions object so that we could run the 'arules' algorithm on it. The only two columns we needed for that were ID\_NUMBER and GIFT\_DEPARTMENT. After some thought, it was determined this was the best level to do the assocation rule mining. Since all of the donors in this file had made a gift to the College of Business - which would have been contained at the GIFT\_SCHOOL level - any results we tried to find using GIFT\_SCHOOL would have very limited usefulness. That's because the confidence for all of the generated rules for gifts to the College of Business would have been 1, since everyone in the file had done this.
 
 We then needed to remove duplicate rows, since people could have given to different departments under the same school. These rows would have been unique in the original file but no longer in the smaller file. After removing duplicates, we were then left with 7,461 rows. From there, we could then take the final step of coverting the data to the Transactions object.
 
@@ -203,7 +203,7 @@ Once we determined what the top association rules were for giving to other depar
 
 ![](Case_3_-_Donation_Area_Associations_files/figure-markdown_github/unnamed-chunk-6-1.png)
 
-When we looked at the data, we saw that while 3,192 donors made a gift to the Department of Business Administration in FY18, only 55 donors made a gift to Scholarships. However, of these 55, 52 of them also made a gift to the Department of Business Administration. Therefore, as an example, if the goal was to increase the number of donors to a particular area - such as Scholarships - and we knew there was a strong association between this department and Business Administration, which donors to Business Administration would be the best prospects to also be solicited for a gift to Scholarships?
+When we looked at the data, we saw that while 3,192 donors made a gift to the Department of Business Administration in FY18, only 55 donors made a gift to Scholarships. However, of these 55, 52 of them also made a gift to the Department of Business Administration. Therefore, we could better identify the best prospects who would give to both areas since there was a strong association between giving to Scholarships and Business Administration.
 
 The first step we took to start this part of the analysis was to identify which 52 people had made a gift to both areas to use as our target group.
 
@@ -224,7 +224,7 @@ str(donations.target)
 
 For our predictive model, we decided to use LASSO (Least Absolute Shrinkage and Selection Operator), which required us to clean our data to get all the variables into a numeric format and also handle missing values. To do this, we created binary/dummy variables for each of the GENDER, MARITAL\_STATUS, and MAJOR categories. We also binned the AGE and GRADUATION\_YR categories into dummy variables by decade, which accomplished two things for us. First, it allowed us to account for potential non-linearity in relationships of these variables with the target variable. For example, in giving, sometimes the likelihood of someone making a gift increases until they hit their 60s-70s and then starts to decrease again. This method also allowed us to handle the missing values that were present in both of these categories.
 
-Once all these steps were done, we were now left with a much larger dataset that contained many dummy variables for the converted categorical variables, but which was now formatted for us to be able to run LASSO.
+Once all these steps were done, we were left with a much larger dataset that contained many dummy variables for the converted categorical variables, but which was now formatted for us to be able to run LASSO.
 
 ``` r
 table(donations.target$TARGET)
@@ -294,7 +294,7 @@ glmnet_pred <- predict(glmnet_model,
 AUC::auc(roc(glmnet_pred, as.factor(donations.targetTEST$TARGET)))
 ```
 
-    ## [1] 0.8147755
+    ## [1] 0.8127633
 
 ``` r
 plot(roc(glmnet_pred, as.factor(donations.targetTEST$TARGET)))
