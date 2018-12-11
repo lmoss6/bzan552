@@ -59,7 +59,7 @@ A second dataset contains information on teams that will be used to convert team
 
 team\_name - the name of the team
 
-team\_short\_short - nickname/short name for team
+team\_short - nickname/short name for team
 
 team\_id - unique 3-digit team ID
 
@@ -73,7 +73,7 @@ team\_conference\_pre2002 - conference team was in prior to realignment in 2002
 
 team\_division\_pre2002 - division team was in prior to realignment in 2002
 
-The third dataset contains information on each stadium in which the games are played and is made up of the following variables:
+The third dataset contains information on each stadium in which the games were played and is made up of the following variables:
 
 stadium\_name - name of stadium
 
@@ -160,7 +160,7 @@ games$weather_detail <- NULL
 games$weather_humidity <- NULL
 ```
 
-The next bit of cleanup required removing rows in which there is not a favorite team listed. You can see that there are 2,601 of them, with many occurring in the earlier years. This is likely due to the fact that the betting/favorite data was not as widespread 40-50 year ago and probably just not able to be collected. Since we were looking for associations on whether or not the favorite won, this was a necessary piece of information for our analysis, and we were not be able to use rows that do not contain it.
+The next bit of cleanup required removing rows in which there is not a favorite team listed. You can see that there are 2,601 of them, with many occurring in the earlier years. This is likely due to the fact that the betting/favorite data was not as widespread 40-50 year ago and probably just not able to be collected. Since we were looking for associations on whether or not the favorite won, this was a necessary piece of information for our analysis, and we were not able to use rows that do not contain it.
 
 ``` r
 table(games$team_favorite_id)
@@ -193,9 +193,9 @@ Since we had the scores for the home and away teams and knew which one was the f
 
 From this information, we also calculated two more variables for whether or not the favorite won and whether or not the favorite covered the spread, which was the focus of our analysis for questions 1 and 2.
 
-At this point, we now also added in two of the variables around the stadium in which the game was played - stadium\_type and stadium\_surface - which were found in the 'stadiums' dataset.
+We then added two of the variables around the stadium in which the game was played - stadium\_type and stadium\_surface - which were found in the 'stadiums' dataset.
 
-While we were not focused on the over/under as far as predicted points scored, we thought it might be interesting to see if higher-scoring games or higher-scoring games were more prone to upsets. Therefore, we added the score\_home and score\_away variables for a new points\_scored variable to account for this.
+While we were not focused on the over/under as far as predicted points scored, we thought it might be interesting to see if higher-scoring games or lower-scoring games were more prone to upsets. Therefore, we added the score\_home and score\_away variables for a new points\_scored variable to account for this.
 
 Since we were going to convert all of the variables to factors before running association rules, we binned the numeric variables into ranges that would more easily convert to factors - including weather\_temperature, weather\_wind\_mph, fav\_margin\_predicted, fav\_margin\_difference, and points\_scored.
 
@@ -367,7 +367,7 @@ inspect(rules.wins[1:10])
     ## [10] {fav_margin_predicted=(7,14],                                                          
     ##       stadium_type=outdoor}        => {favorite_win=Yes} 0.1316645  0.8019802 1.217216  1215
 
-There were two new observations we made here. The first was that the number of rules had been reduced to 259, which is a smaller number than the original 1,963 rules. The second was that while this number was smaller, we still observed some redundancy in the results. This means that a rule may show up that is a subset of another rule, meaning that the larger rule is not really adding any more information. However, we addressed the redundancy to reduce the number of rules either further to a total of 19.
+There were two new observations we made here. The first was that the number of rules had been reduced to 259, which is a smaller number than the original 1,963 rules. The second was that while this number was smaller, we still observed some redundancy in the results. This means that a rule may show up that is a subset of another rule, meaning that the larger rule is not really adding any more information. However, we addressed the redundancy to reduce the number of rules even further to a total of 19.
 
 ``` r
 subset.matrix <- is.subset(rules.wins, rules.wins)
@@ -419,7 +419,7 @@ inspect(rules.wins.reduced[1:6])
 
 You can now see the top handful of rules associated with a favored team winning the game.
 
-The first is if the predicted margin of victory is 7-14 points. This should not be too surprising to see this rule with the strongest lift, because in the NFL, being more than a touchdown favorite means that the odds are pretty good that you will win the game. You can also see this relationship illustrated in the following chart, where the winning percentage of the favorite increases the more they are favored going into a game - which also makes complete logical sense.
+The first rule is if the predicted margin of victory is 7-14 points. It should not be too surprising to see this rule with the strongest lift, because in the NFL, being more than a touchdown favorite means that the odds are pretty good that you will win the game. You can also see this relationship illustrated in the following chart, where the winning percentage of the favorite increases the more they are favored going into a game - which also makes complete logical sense.
 
 ![](Case_2_-_NFL_Scores_files/figure-markdown_github/unnamed-chunk-20-1.png)
 
