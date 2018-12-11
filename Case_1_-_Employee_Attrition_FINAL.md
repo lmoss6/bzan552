@@ -29,7 +29,7 @@ Education - (1:Below College, 2:College, 3:Bachelor, 4:Master, 5:Doctor)
 
 EducationField
 
-EmployeeCount - all employees have count of 1
+EmployeeCount - all employees have a count of 1
 
 EmployeeNumber - employee's ID number
 
@@ -83,8 +83,7 @@ YearsSinceLastPromotion - number of years since last promotion
 
 YearsWithCurrManager - number of years with current manager
 
-Part 1 - Clustering By All Employees
-------------------------------------
+### Part 1 - Clustering By All Employees
 
 ### Approach
 
@@ -145,7 +144,7 @@ Even though the categorical variables were essentially left alone, the numeric v
 employees_scaled <- cbind(employees[,-which(names(employees) %in%  names(employees)[sapply(employees, is.numeric)])], scale(employees[,names(employees)[sapply(employees, is.numeric)]]))
 ```
 
-After reviewing all of the variables, it become apparent that several would not be needed for the analysis. The variables Over 18 ('Y'), Employee Count (1), and Standard Hours (80) contained the same values for every employee in the file, so no new information would be added by including them. EmployeeNumber was also removed, because this was the employee's ID number, which also adds no value to the analysis.
+After reviewing all of the variables, it became apparent that several would not be needed for the analysis. The variables Over 18 ('Y'), Employee Count (1), and Standard Hours (80) contained the same values for every employee in the file, so no new information would be added by including them. EmployeeNumber was also removed, because this was the employee's ID number, which also adds no value to the analysis.
 
 ``` r
 employees_scaled$Over18 <- NULL
@@ -174,7 +173,7 @@ plot(1:8, sil_width,
 lines(1:8, sil_width)
 ```
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-5-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-5-1.png)
 
 You can see from the plot that 2 clusters would be the optimal number to use. Therefore, the fit was created with k=2 so that summary statistics could be calculated for each cluster. The cluster results were also appended to the original employees dataset in order to dig deeper into the results.
 
@@ -204,25 +203,25 @@ You can view the complete summary for every variable by looking at the summary g
 
 The first thing observed is that one cluster has a higher than average attrition rate, while the other cluster is lower than average.
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-8-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-8-1.png)
 
 In the cluster with higher attrition, you can see that the age is slightly lower, pay is lower, these employees have fewer years at company, fewer overall working years, and lower job levels. These factors all point to employees who are less tenured and younger in their careers than the cluster with less attrition.
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-9-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-9-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-10-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-10-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-11-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-11-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-12-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-12-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-13-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-13-1.png)
 
 While it makes sense that these younger, less tenured employees would be prone to higher rates of turnover, since they have less invested with the company over a longer period of time, there is another significant difference between the two clusters that could indicate something else going on.
 
 If you look at the differences in job roles/departments between the two groups, they are significant and seem to have broken out along these lines.
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-14-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-14-1.png)
 
 The cluster with higher attrition is made up almost entirely of jobs in the Research & Development Department, while the other cluster consists of a majority of Sales jobs. This is an important insight that we will explore further in the analysis.
 
@@ -375,7 +374,7 @@ plot(cumsum(prop_var), xlab = "Principal Component",
      ylab = "Cumulative Proportion of Variance", type = "b")
 ```
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-18-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-18-1.png)
 
 After viewing the summary values and the plot, it was determined to use the first 38 principal components. This amount captured over 98% of the variance, but reduced the number of variables from 50 to 38.
 
@@ -385,7 +384,7 @@ employees_PCA <- employees_PCA[1:1470, 1:38]
 
 ### PAM Clustering with Gower Distance on Entire Dataset - With PCA
 
-Once the number of variables was reduced on the dataset, the same clustering method used previously, which utilized Gower distance with PAM was implemented to determine the ideal number of clusters.
+Once the number of variables was reduced on the dataset, the same clustering method used previously - which utilized Gower distance with PAM - was implemented to determine the ideal number of clusters.
 
 ``` r
 gower_dist_PCA <- daisy(employees_PCA, metric = "gower")
@@ -401,7 +400,7 @@ plot(1:8, sil_width,
 lines(1:8, sil_width)
 ```
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-20-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-20-1.png)
 
 The Silhouette plot shows a peak at k=4, which is the value we will use.
 
@@ -429,21 +428,21 @@ table(pam_fit_PCA$clustering)
 
 Next, you can see that the attrition rates vary by cluster, with one being clearly above average, one being clearly below average, and the other two hovering around average.
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-23-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-23-1.png)
 
 We then look at how each cluster differs along some of the same variables that we investigated in the first analysis to see if a similar picture begins to emerge.
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-24-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-24-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-25-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-25-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-26-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-26-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-27-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-27-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-28-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-28-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-29-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-29-1.png)
 
 If you compare these plots to the plots generated from the cluster analysis with 2 clusters that did not use PCA, you can see that there is actually less variance between the clusters than previously seen. We will also run a quick test of cluster stability with the 'clusterboot' function to further test whether a smaller number of clusters is the preferred route to proceed.
 
@@ -455,13 +454,13 @@ If you compare these plots to the plots generated from the cluster analysis with
 cboot.pam2$bootmean
 ```
 
-    ## [1] 0.6382063 0.5451880
+    ## [1] 0.6850422 0.6032125
 
 ``` r
 cboot.pam2$bootbrd
 ```
 
-    ## [1] 42 68
+    ## [1] 35 61
 
 4 Clusters
 
@@ -469,13 +468,13 @@ cboot.pam2$bootbrd
 cboot.pam4$bootmean
 ```
 
-    ## [1] 0.6555361 0.5452531 0.6152888 0.5367098
+    ## [1] 0.6022058 0.4917361 0.5646621 0.5295556
 
 ``` r
 cboot.pam4$bootbrd
 ```
 
-    ## [1] 26 61 25 62
+    ## [1] 37 70 30 65
 
 Checking the results from the stability tests confirms the idea that using a smaller number of clusters should be the preferred route going forward, since the clustering at k=2 dissolved a significantly fewer number of times than k=4.
 
@@ -483,8 +482,7 @@ However, one of the variables that displayed significant differences betwen the 
 
 This approach has more practical implications too, since it would allow managers at the department-level to act more locally on these results, rather than just using the insights found from this analysis on a company-wide level. Plus, with jobs differing so much in responsibility and classification from one another, this is probably the more appropriate level of detail to do some preliminary grouping on job similarities. Then, other higher attrition characteristics can be found based on other variables, rather than the most obvious job department/role differences found above.
 
-Part 2 - Clustering By Department
----------------------------------
+### Part 2 - Clustering By Department
 
 We will build on the results we found in Part 1 by attempting to use a smaller number of clusters (for each department) and also by not applying PCA to the data. The results without PCA resulted in smaller, more stable clusters with more observable differences, so we will use that same approach again. It was worth a try to see the results of PCA, but as mentioned above, PCA is not ideally suited for categorical variables, so even after converting them to binary varialbes, it is probably not too surprising that the results did not seem as good. However, the Gower distance with PAM approach is suited for categorical and mixed data type variables, which helps explain why this method worked well.
 
@@ -507,7 +505,7 @@ plot(1:8, sil_width,
 lines(1:8, sil_width)
 ```
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-34-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-34-1.png)
 
 For the Human Resources department, the plot shows that 2 is the best number of clusters to use.
 
@@ -525,17 +523,17 @@ employees_HR <- cbind(employees_HR, pam_fit_HR$clustering)
 
 Just as before, we will plot the difference in the attrition rates of the two clusters, along with differences in key attributes between the two.
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-36-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-36-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-37-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-37-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-38-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-38-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-39-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-39-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-40-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-40-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-41-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-41-1.png)
 
 From looking at these plots, you can start to see a very clear story about the types of employees who are more likely to leave within the Human Resources department. One cluster actually has 0% attrition, but this cluster is significantly older, has been working for a much longer number of years, gets paid a lot more, and holds higher, more senior job roles. The cluster that is younger, gets paid less, and holds lower positions accounts for all of the attrition within HR. This breakdown gives us a very good look at the different characteristics between the two groups, and we will see if similar trends emerge in Research & Development and Sales.
 
@@ -558,7 +556,7 @@ plot(1:8, sil_width,
 lines(1:8, sil_width)
 ```
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-42-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-42-1.png)
 
 This Silhouette plot actually shows that 7 would be the ideal number of clusters, but in keeping with our conclusions from Part 1 to keep as small a number of clusters as possible, we will choose k=4 instead. There is also a peak in the coefficient value at 4, even though it is not as high as 7, but the tradeoff for greater simplicity is worth it in this case.
 
@@ -574,25 +572,25 @@ pam_results_rd <- employees_rd %>%
 employees_rd <- cbind(employees_rd, pam_fit_rd$clustering)
 ```
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-44-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-44-1.png)
 
 There are significant differences in the attrition rates between these 4 clusters, so now we will examine how they most differ once again on several of the varialbes.
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-45-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-45-1.png)
 
 Just looking at the age chart, you can see that older employees have the lowest attrition rate, while the two clusters with the youngest employees have the two highest attrition rates. This relationship between age and attrition is one that continues to hold true across the different analyses.
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-46-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-46-1.png)
 
 One interesting observation is that one of the clusters with the higher attrition is only about 33% male. This is even more striking since 61% of all Research & Development employees are male, so this group has really differentiated itself along gender lines.
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-47-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-47-1.png)
 
 If you look at Marital Status, you can also see some significant differences, especially between the two clusters with the higher attrition. One of them is majority male, 79% of whom are not married, while the other is two-thirds female, 71% of whom are married. When targeting these two groups with efforts to try to reduce attrition, these demographic characteristics are very important to keep in mind for different potential initiatives.
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-48-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-48-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-49-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-49-1.png)
 
 These last two plots illustrate the key differences between the jobs in each cluster. The two clusters with the lowest attrition consist of research scientists and research directors, respectively. The two clusters with the higher attrition consist of lab techs, which are lower level jobs. The research directors are also primarily made up of more senior people who have worked at the company for a longer period of time.
 
@@ -615,7 +613,7 @@ plot(1:8, sil_width,
 lines(1:8, sil_width)
 ```
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-50-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-50-1.png)
 
 This chart of the Silhouette coefficients shows that 2 is the ideal number of clusters to use for the Sales department.
 
@@ -631,23 +629,23 @@ pam_results_sales <- employees_sales %>%
 employees_sales <- cbind(employees_sales, pam_fit_sales$clustering)
 ```
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-52-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-52-1.png)
 
 This breakdown shows that while Sales has a higher rate of attrition in general than the company overall, there is still a clear difference between a higher-attrition group and a lower-attrition group within Sales.
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-53-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-53-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-54-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-54-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-55-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-55-1.png)
 
-![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github-ascii_identifiers/unnamed-chunk-56-1.png)
+![](Case_1_-_Employee_Attrition_FINAL_files/figure-markdown_github/unnamed-chunk-56-1.png)
 
-These plots help to illustrate the difference between the two sales clusters. The group with higher attrition is more female, gets paid less, is married less often, and has worked for the company for fewer years. The group with less attrition is more male, gets paid more, is majority married, and has been at the company longer.
+These plots help to illustrate the differences between the two sales clusters. The group with higher attrition is more female, gets paid less, is married less often, and has worked for the company for fewer years. The group with less attrition is more male, gets paid more, is majority married, and has been at the company longer.
 
 ### Conclusions
 
-This analysis attempts to find important characteristics of employeees at a company who are more likely to leave. By looking at clusters by Department, we are also able to get down to a higher level of detail and allow managers to put more actionable, department-specific results into action. The characteristics of the at-risk clusters for each department as summarized as follows:
+This analysis attempts to find important characteristics of employeees at a company who are more likely to leave. By looking at clusters by Department, we are also able to get down to a higher level of detail and allow managers to put more practical, department-specific results into action. The characteristics of the at-risk clusters for each department as summarized as follows:
 
 Human Resources - Younger, lower paid, hold lower level positions, worked at company for fewer years
 
